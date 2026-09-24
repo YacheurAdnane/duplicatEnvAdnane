@@ -35,6 +35,23 @@ For a route called `<name>`, `output/<name>/` holds:
 
 Everything uses one local frame. A point (x, y) in the xodr is (x, y) in the lanelet map and (x, -y) in Unreal, which is how CARLA and the Autoware bridge already map them.
 
+## Requirements and tested versions
+
+The generator was built and tested on one machine with these versions. Other versions may work, but only these were tried.
+
+| Component | Tested with | Other versions |
+|---|---|---|
+| Operating system | Ubuntu 22.04 | Other Linux distributions should work. Windows and macOS are not supported: the page uses `systemd-run` for the memory limit and the screenshots use EGL |
+| Python | 3.10 | 3.10 or newer; the `carla` module must match your Python version |
+| CARLA | 0.9.15 (Unreal Engine 4.26 fork), Python module `carla` 0.9.15 | The `carla` module must be the same version as the CARLA you import the map into. 0.9.13 and 0.9.14 have the same OSM converter API and should work, not tested. CARLA 0.10 (Unreal Engine 5) is not supported: its map import works differently |
+| Autoware | 1.9.0 (main branch of 7 Sep 2026, ROS 2 Humble) | Needs an Autoware that reads `map_projector_info.yaml` with `projector_type: Local`. Autoware Universe from the end of 2023 onward has it; older releases don't know that file. Not tested on other versions |
+| RoadRunner | R2026a with the Scene Builder add-on | Any installed `RoadRunner_R20*` is found. The API commands used (NewProject, Import, Export, SaveScene) exist in recent releases, but the HD Map format and export names such as "CARLA Filmbox" and "Lanelet2 Map" can differ; an export a release doesn't have is skipped and logged. Not tested on other releases |
+| ROS 2 and Lanelet2 | Humble, `lanelet2` 1.2.3 | Only needed for `tools/validate_lanelet2.py` |
+| protoc | 3.12 | Only for the RoadRunner HD Map file (`sudo apt install protobuf-compiler`) |
+| GPU | NVIDIA with EGL | Only for the preview screenshots; without one they are skipped |
+
+Python packages: `pip install -r requirements.txt`, plus the `carla` module that comes with your CARLA install (`PythonAPI/carla/dist/`, or `pip install carla==0.9.15`).
+
 ## Start
 
 ```bash
@@ -313,4 +330,3 @@ duplicat_env was designed and built by Adnane Yacheur. Copyright (c) 2026 Adnane
 For questions, collaboration or permission to reuse the code, write to adnaneyacheur@gmail.com.
 
 Data credits: map data (c) OpenStreetMap contributors (ODbL); elevation, LIDAR HD, aerial photos and BD TOPO from IGN (Licence Ouverte / Etalab 2.0); ground textures from ambientCG and Poly Haven (CC0). The generated maps are not in this repository: run the generator to build them.
-
