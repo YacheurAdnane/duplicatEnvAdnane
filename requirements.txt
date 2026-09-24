@@ -1,0 +1,6 @@
+numpy
+scipy
+shapely>=2.1
+pyproj
+Pillow
+osmium        # only for the offline Geofabrik fallback

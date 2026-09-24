@@ -1,0 +1,17 @@
+Copyright (c) 2026 Adnane Yacheur. All rights reserved.
+
+duplicat_env was designed and built by Adnane Yacheur.
+
+The source code, documentation and pictures in this repository may not be
+copied, modified, redistributed or used in other projects without written
+permission from the author. Viewing the code on GitHub and running it for
+personal evaluation is allowed.
+
+Contact: Adnane Yacheur, adnaneyacheur@gmail.com
+
+Third-party data and software used at run time keep their own licences:
+OpenStreetMap data (ODbL, (c) OpenStreetMap contributors), IGN Geoplateforme
+data (Licence Ouverte / Etalab 2.0), AWS Terrain Tiles, ambientCG and
+Poly Haven textures (CC0), CARLA (MIT), MathWorks RoadRunner (commercial
+licence, not included). None of that data is stored in this repository; it
+is downloaded when a map is generated.

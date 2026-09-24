@@ -1,0 +1,561 @@
+<!doctype html>
+<!-- Copyright (c) 2026 Adnane Yacheur. All rights reserved. Contact: adnaneyacheur@gmail.com -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>duplicat_env – route twin builder</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@7.1.0/turf.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #5f6b7d; --line: #dde2ea;
+    --accent: #1f6feb; --accent-ink: #fff; --ok: #1a7f37; --err: #cf222e; --route: #e8590c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1318; --panel: #161b22; --ink: #e6edf3; --muted: #8b949e; --line: #2a313c;
+            --accent: #388bfd; --ok: #3fb950; --err: #f85149; }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  #app { display: grid; grid-template-columns: 400px 1fr; height: 100vh; }
+  #side { overflow-y: auto; border-right: 1px solid var(--line); background: var(--panel); padding: 16px; }
+  #map { height: 100vh; }
+  h1 { font-size: 18px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 14px; font-size: 13px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+       margin: 18px 0 8px; }
+  .row { display: flex; gap: 8px; align-items: center; margin: 6px 0; }
+  .row > * { flex: 1; }
+  label.opt { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+  label.wide { display: block; margin: 4px 0; }
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; margin: 6px 0; }
+  .checks label.opt { margin: 3px 0; }
+  label.wide select { margin-top: 4px; }
+  label.num { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 8px; margin: 4px 0; }
+  input[type=text], input[type=number], select {
+    width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px;
+    background: var(--bg); color: var(--ink); font: inherit; }
+  button { padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg);
+           color: var(--ink); font: inherit; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; border-radius: 0; flex: 1; }
+  .seg button.on { background: var(--accent); color: var(--accent-ink); }
+  #wplist { list-style: none; padding: 0; margin: 6px 0; max-height: 150px; overflow-y: auto; }
+  #wplist li { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed var(--line);
+               font-variant-numeric: tabular-nums; font-size: 12.5px; }
+  #wplist li button { padding: 0 6px; font-size: 12px; }
+  .stat { display: flex; gap: 16px; font-variant-numeric: tabular-nums; }
+  .stat div b { display: block; font-size: 17px; }
+  .stat div span { color: var(--muted); font-size: 12px; }
+  details { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; margin: 8px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  #bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+  #bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s; }
+  #overall { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; font-size: 13px; margin: 6px 0 4px; }
+  #ram { font-size: 12px; color: var(--muted); margin: 4px 0; font-variant-numeric: tabular-nums; }
+  #ram.hot { color: var(--err); }
+  #tasks { margin-top: 8px; }
+  .task { display: grid; grid-template-columns: 16px 1fr 44px 52px; gap: 6px; align-items: center;
+          font-size: 12.5px; padding: 2px 0; font-variant-numeric: tabular-nums; }
+  .task.child { padding-left: 16px; }
+  .task .ic { text-align: center; color: var(--muted); }
+  .task.done .ic { color: var(--ok); }
+  .task.failed .ic, .task.failed .nm { color: var(--err); }
+  .task.pending .nm, .task.skipped .nm { color: var(--muted); }
+  .task .pc, .task .tm { text-align: right; color: var(--muted); }
+  .task .tb { grid-column: 2 / 5; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+  .task .tb i { display: block; height: 100%; background: var(--accent); transition: width .4s; }
+  .task .tb i.ind { width: 35% !important; animation: slide 1.2s ease-in-out infinite; }
+  .task .dt { grid-column: 2 / 5; color: var(--muted); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--line); border-top-color: var(--accent);
+          border-radius: 50%; animation: rot .8s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+  @keyframes slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) { .spin, .task .tb i.ind { animation: none; } }
+  #log { font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg);
+         border: 1px solid var(--line); border-radius: 6px; padding: 8px; height: 190px; overflow-y: auto;
+         white-space: pre-wrap; margin-top: 8px; }
+  #files a { color: var(--accent); text-decoration: none; }
+  #files li { font-size: 12.5px; margin: 2px 0; }
+  .hint { color: var(--muted); font-size: 12.5px; }
+  .qm { display: inline-block; width: 16px; height: 16px; line-height: 16px; border-radius: 50%; border: 1px solid var(--line);
+        text-align: center; font-size: 11px; color: var(--muted); cursor: pointer; margin-left: 4px; flex: none; }
+  .qm:hover { border-color: var(--accent); color: var(--accent); }
+  #help { position: fixed; z-index: 2000; max-width: 380px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 8px; padding: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: 13px; display: none; }
+  #help img { width: 100%; border-radius: 4px; margin-top: 8px; display: block; }
+  #help b { display: block; margin-bottom: 4px; }
+  .warn { color: var(--err); font-size: 12.5px; }
+  .search { position: relative; }
+  #results { position: absolute; z-index: 1000; left: 0; right: 0; background: var(--panel);
+             border: 1px solid var(--line); border-radius: 6px; list-style: none; margin: 2px 0 0; padding: 0; }
+  #results li { padding: 6px 8px; cursor: pointer; font-size: 13px; }
+  #results li:hover { background: var(--bg); }
+  .wp-icon { background: var(--panel); border: 2px solid var(--route); border-radius: 50%; color: var(--ink);
+             font: 700 11px/18px system-ui; text-align: center; width: 22px !important; height: 22px !important; }
+  @media (max-width: 800px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+    #map { height: 55vh; grid-row: 1; }
+    #side { grid-row: 2; border-right: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <h1>duplicat_env</h1>
+    <p class="sub">Pick a real road, get a CARLA map (FBX + OpenDRIVE) and an Autoware map (Lanelet2 + PCD). Free data only: OpenStreetMap, OSRM, IGN, AWS Terrain Tiles.</p>
+
+    <div class="search">
+      <input id="q" type="text" placeholder="Search a place (e.g. Massy, Briis-sous-Forges)">
+      <ul id="results" hidden></ul>
+    </div>
+
+    <h2>1 · Route</h2>
+    <div class="seg" id="mode">
+      <button data-m="snap" class="on" title="Click points, the route follows the roads">Follow roads</button>
+      <button data-m="free" title="Click points, straight segments between them">Freehand</button>
+      <button data-m="area" title="Click around a zone; the shape closes back to the start and everything inside is built">Area</button>
+    </div>
+    <p class="hint" id="modehint">Click the map to add waypoints along the road. Drag markers to adjust, right-click one to delete it.</p>
+    <div class="row">
+      <button id="undo">Undo</button><button id="reverse">Reverse</button><button id="clear">Clear</button>
+    </div>
+    <div class="row"><button id="example">Example: A10 Briis-sous-Forges → Les Molières</button></div>
+    <ul id="wplist"></ul>
+    <div class="stat">
+      <div><b id="len">0.00 km</b><span id="lenlabel">route length</span></div>
+      <div><b id="area">0.0 km²</b><span id="arealabel">corridor area</span></div>
+    </div>
+    <p class="warn" id="warn"></p>
+
+    <h2>2 · Content</h2>
+    <label class="num">Map name <input id="name" type="text" value="A10_twin"></label>
+    <label data-help="corridor" class="num">Corridor half-width (m) <input id="corridor" type="number" min="30" max="600" step="10" value="150"></label>
+    <div class="checks">
+      <label data-help="buildings" class="opt"><input type="checkbox" id="buildings" checked> Buildings</label>
+      <label data-help="vegetation" class="opt"><input type="checkbox" id="vegetation" checked> Trees</label>
+      <label data-help="panels" class="opt"><input type="checkbox" id="panels" checked> Panels &amp; poles</label>
+      <label data-help="barriers" class="opt"><input type="checkbox" id="barriers" checked> Barriers</label>
+      <label data-help="markings" class="opt"><input type="checkbox" id="markings" checked> Lane lines</label>
+      <label data-help="rail" class="opt"><input type="checkbox" id="rail" checked> Railways</label>
+      <label class="opt"><input type="checkbox" id="water" checked> Water</label>
+      <label class="opt"><input type="checkbox" id="paths" checked> Footpaths</label>
+      <label data-help="lidar_trees" class="opt"><input type="checkbox" id="lidar_trees" checked> Real trees (LIDAR, FR)</label>
+    </div>
+
+    <details open>
+      <summary>Ground and trees</summary>
+      <label class="wide" data-help="ground_quality">Ground quality
+        <select id="ground_quality"><option value="high">High: photo textures + grass tufts, flowers, rocks</option><option value="medium">Medium: photo textures, soft transitions</option><option value="low">Low: flat colours, soft transitions</option></select></label>
+      <label class="opt" data-help="ground_details"><input type="checkbox" id="ground_details" checked> 3D grass tufts, flowers and small rocks near the road (high)</label>
+      <label class="opt"><input type="checkbox" id="bdtopo" checked> IGN BD TOPO: forest types, hedges, building heights (FR)</label>
+      <label data-help="ortho" class="opt"><input type="checkbox" id="ortho"> Aerial photo on the ground instead of grass / field / forest-floor textures</label>
+      <p class="hint">The ground gets a type per area (lawn, meadow, crops, ploughed field, forest floor, paving, dirt) from the aerial photos, BD TOPO and OSM landuse. Press ? next to an option for an example.</p>
+    </details>
+
+    <details>
+      <summary>Inference (fill gaps in OpenStreetMap)</summary>
+      <label data-help="infer_guardrails" class="opt"><input type="checkbox" id="infer_guardrails" checked> Guard rails along motorway/trunk edges</label>
+      <label class="opt"><input type="checkbox" id="infer_panels" checked> Advance exit panels (1000 m, 500 m)</label>
+    </details>
+
+    <details>
+      <summary>Terrain, trees, lines</summary>
+      <label data-help="network" class="num">Road network
+        <select id="network"><option value="auto">Junctions by CARLA's converter (default)</option><option value="roadrunner">RoadRunner only (no CARLA; junctions must be drawn in RoadRunner)</option><option value="simple">Simple (no junctions)</option></select></label>
+      <label class="num">OSM source
+        <select id="osm_source"><option value="auto">Auto (Overpass, else Geofabrik)</option><option value="overpass">Overpass API</option><option value="geofabrik">Geofabrik extract (offline)</option></select></label>
+      <label class="num">Elevation source
+        <select id="dem"><option value="auto">Auto</option><option value="ign">IGN RGE ALTI (France, 1-2 m)</option><option value="terrarium">AWS Terrarium (world)</option></select></label>
+      <label class="num">Terrain grid (m) <input id="terrain_res" type="number" min="1" max="20" step="0.5" value="4"></label>
+      <label class="num">Aerial photo (m/px) <input id="ortho_res" type="number" min="0.2" max="2" step="0.05" value="0.5"></label>
+      <label class="num">Tree spacing in woods (m) <input id="tree_spacing" type="number" min="3" max="30" step="1" value="7"></label>
+      <label class="num">Max trees <input id="max_trees" type="number" min="0" max="300000" step="1000" value="40000"></label>
+      <label class="num">Country rules
+        <select id="country"><option value="FR">France</option><option value="DE">Germany</option><option value="OTHER">Other</option></select></label>
+      <label class="num">Dash length (m) <input id="dash" type="number" min="0.5" max="20" step="0.5" value="3"></label>
+      <label class="num">Dash gap (m) <input id="gap" type="number" min="0.5" max="30" step="0.5" value="10"></label>
+      <label class="num">Lane taper (m) <input id="lane_taper" type="number" min="10" max="300" step="10" value="80"></label>
+    </details>
+
+    <details>
+      <summary>Autoware outputs</summary>
+      <label data-help="pcd" class="opt"><input type="checkbox" id="pcd" checked> Point cloud map (PCD)</label>
+      <label class="num">PCD density (pts/m²) <input id="pcd_density" type="number" min="0.1" max="20" step="0.1" value="1"></label>
+      <label class="num">PCD terrain density <input id="pcd_terrain_density" type="number" min="0.05" max="10" step="0.05" value="0.3"></label>
+      <label class="num">PCD voxel (m) <input id="pcd_voxel" type="number" min="0" max="2" step="0.05" value="0.2"></label>
+      <label class="opt"><input type="checkbox" id="lanelet_other_roads"> Lanelets for side roads too</label>
+      <label class="opt"><input type="checkbox" id="glb" checked> 3D preview (GLB)</label>
+    </details>
+
+    <details open>
+      <summary>RoadRunner and quality</summary>
+      <label data-help="roadrunner" class="opt"><input type="checkbox" id="roadrunner" checked> Build a RoadRunner project <span class="hint" id="rrstate"></span></label>
+      <label data-help="rr_exports" class="opt"><input type="checkbox" id="rr_exports" checked> Also export from RoadRunner (CARLA FBX, Lanelet2, OpenDRIVE; slow on long routes)</label>
+      <label class="num">Existing project (optional) <input id="roadrunner_project" type="text" placeholder="empty = new project"></label>
+      <p class="hint">A new project copies RoadRunner's asset library (about 2 GB). Point to one of your projects to add the scene there instead.</p>
+      <label class="opt"><input type="checkbox" id="hq_textures" checked> Textures for asphalt, grass, trees, facades</label>
+    </details>
+
+    <h2>3 · Build</h2>
+    <button class="primary" id="go" style="width:100%" disabled>Generate digital twin</button>
+    <div id="overall"><span id="stage"></span><span id="times"></span></div>
+    <div id="bar"><i></i></div>
+    <div id="ram"></div>
+    <div id="tasks"></div>
+    <details><summary>Log</summary><div id="log"></div></details>
+    <ul id="files"></ul>
+
+    <h2>Previous builds</h2>
+    <ul id="prev" class="hint"></ul>
+    <p class="hint" style="margin-top:18px">© 2026 Adnane Yacheur · <a href="mailto:adnaneyacheur@gmail.com">adnaneyacheur@gmail.com</a></p>
+  </aside>
+  <div id="map"></div>
+</div>
+<div id="help"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const map = L.map('map', { zoomControl: true }).setView([48.64, 2.15], 12);
+window.leafletMap = map;  // for scripted tests
+const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { maxZoom: 19, attribution: '© OpenStreetMap contributors' }).addTo(map);
+const ign = L.tileLayer('https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/jpeg',
+  { maxZoom: 19, attribution: '© IGN' });
+const esri = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+  { maxZoom: 19, attribution: 'Esri World Imagery (view only)' });
+L.control.layers({ 'OpenStreetMap': osm, 'IGN aerial (France)': ign, 'Esri aerial': esri }).addTo(map);
+L.control.scale({ imperial: false }).addTo(map);
+
+let mode = 'snap', wps = [], markers = [], coords = [], routeLine = null, corrLayer = null, routing = 0;
+const routeStyle = { color: getComputedStyle(document.documentElement).getPropertyValue('--route').trim() || '#e8590c', weight: 5, opacity: .9 };
+
+document.querySelectorAll('#mode button').forEach(b => b.onclick = () => {
+  mode = b.dataset.m;
+  document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x === b));
+  $('#modehint').textContent = mode === 'snap'
+    ? 'Click the map to add waypoints along the road. Drag markers to adjust, right-click one to delete it.'
+    : mode === 'free' ? 'Click to draw the route point by point (straight lines). Use this where routing fails.'
+    : 'Click around the zone you want. The shape always closes back to point 1, and everything inside is built: every road with its junctions, buildings, trees, ground.';
+  $('#lenlabel').textContent = mode === 'area' ? 'outline' : 'route length';
+  $('#arealabel').textContent = mode === 'area' ? 'area' : 'corridor area';
+  update();
+});
+
+function icon(i) { return L.divIcon({ className: 'wp-icon', html: String(i + 1), iconSize: [22, 22] }); }
+
+function redrawMarkers() {
+  markers.forEach(m => map.removeLayer(m));
+  markers = wps.map((p, i) => {
+    const m = L.marker([p[1], p[0]], { draggable: true, icon: icon(i) }).addTo(map);
+    m.on('dragend', e => { const ll = e.target.getLatLng(); wps[i] = [ll.lng, ll.lat]; update(); });
+    m.on('contextmenu', () => { wps.splice(i, 1); update(); });
+    return m;
+  });
+  $('#wplist').innerHTML = wps.map((p, i) =>
+    `<li><span>${i + 1}. ${p[1].toFixed(5)}, ${p[0].toFixed(5)}</span><button data-i="${i}">✕</button></li>`).join('');
+  $('#wplist').querySelectorAll('button').forEach(b => b.onclick = () => { wps.splice(+b.dataset.i, 1); update(); });
+}
+
+let routeInfo = null;
+async function update() {
+  redrawMarkers();
+  const token = ++routing;
+  routeInfo = null;
+  if (mode === 'area') { coords = wps.length >= 3 ? wps.concat([wps[0]]) : []; draw(); return; }
+  if (wps.length < 2) { coords = []; draw(); return; }
+  if (mode === 'free') { coords = wps.slice(); draw(); return; }
+  $('#warn').textContent = 'Routing along the roads…';
+  coords = []; draw();
+  try {
+    const r = await fetch('/api/route', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ waypoints: wps }) });
+    const js = await r.json();
+    if (token !== routing) return;
+    if (js.error) throw new Error(js.error);
+    coords = js.coords; routeInfo = js.info; $('#warn').textContent = '';
+  } catch (e) {
+    if (token !== routing) return;
+    // never fall back to straight lines in "Follow roads" mode
+    coords = [];
+    $('#warn').textContent = 'Could not route along the roads (' + e.message + '). Move a waypoint onto a road, or use Freehand.';
+  }
+  draw();
+}
+
+function draw() {
+  if (routeLine) map.removeLayer(routeLine);
+  if (corrLayer) map.removeLayer(corrLayer);
+  routeLine = corrLayer = null;
+  if (mode === 'area') return drawArea();
+  $('#go').disabled = coords.length < 2;
+  if (coords.length < 2) { $('#len').textContent = '0.00 km'; $('#area').textContent = '0.0 km²'; return; }
+  const line = turf.lineString(coords);
+  const km = turf.length(line, { units: 'kilometers' });
+  const r = +$('#corridor').value || 150;
+  try {
+    const simp = turf.simplify(line, { tolerance: 0.00005 });
+    const buf = turf.buffer(simp, r / 1000, { units: 'kilometers' });
+    corrLayer = L.geoJSON(buf, { style: { color: '#1f6feb', weight: 1, fillOpacity: .12 } }).addTo(map);
+    $('#area').textContent = (turf.area(buf) / 1e6).toFixed(1) + ' km²';
+  } catch (e) { /* buffer can fail on degenerate lines */ }
+  routeLine = L.layerGroup([L.polyline(coords.map(c => [c[1], c[0]]), routeStyle)]).addTo(map);
+  // direction arrows every ~1/12 of the route
+  const step = Math.max(km / 12, 0.05);
+  for (let d = step / 2; d < km; d += step) {
+    const p = turf.along(line, d, { units: 'kilometers' });
+    const q = turf.along(line, Math.min(km, d + 0.01), { units: 'kilometers' });
+    const b = turf.bearing(p, q);
+    L.marker([p.geometry.coordinates[1], p.geometry.coordinates[0]], { interactive: false,
+      icon: L.divIcon({ className: '', iconSize: [16, 16], html:
+        `<div style="transform:rotate(${b}deg);color:#fff;font:700 13px/16px system-ui;text-align:center;` +
+        `width:16px;height:16px;background:var(--route);border-radius:50%">↑</div>` }) }).addTo(routeLine);
+  }
+  $('#len').textContent = km.toFixed(2) + ' km';
+  const bb = turf.bbox(line);
+  const ext = Math.max(turf.distance([bb[0], bb[1]], [bb[2], bb[1]]), turf.distance([bb[0], bb[1]], [bb[0], bb[3]]));
+  let msg = ext > 30 ? 'Too large: keep the route within ~30 km (Unreal Engine 4 world limit).'
+    : ext > 16 ? 'Large map: above ~16 km, UE4 precision drops at the edges. 5–10 km is the sweet spot.' : '';
+  if (routeInfo && mode === 'snap') {
+    const bad = routeInfo.legs.filter(l => l.uturns || l.backtrack_m > 50);
+    if (routeInfo.detour_ratio > 2 || bad.length)
+      msg += ` The route makes a detour (${routeInfo.detour_ratio}× the straight distance` +
+        (bad.length ? `, U-turn or backtracking on leg ${bad.map(l => l.leg).join(', ')}` : '') +
+        '). A waypoint is probably on the carriageway going the other way: drag it to your side of the road.';
+  }
+  $('#warn').textContent = msg;
+  if (ext > 30) $('#go').disabled = true;
+}
+
+function drawArea() {
+  // the polygon, closed back to point 1; a dashed line shows the closing edge while drawing
+  $('#go').disabled = coords.length < 4;
+  if (wps.length >= 2 && coords.length < 4) {
+    routeLine = L.polyline(wps.map(c => [c[1], c[0]]), { ...routeStyle, dashArray: '6 6' }).addTo(map);
+  }
+  if (coords.length < 4) { $('#len').textContent = '0.00 km'; $('#area').textContent = '0.0 km²'; $('#warn').textContent = ''; return; }
+  const poly = turf.polygon([coords]);
+  routeLine = L.layerGroup([
+    L.polygon(coords.map(c => [c[1], c[0]]), { color: routeStyle.color, weight: 3, fillOpacity: .15 }),
+    L.polyline([[wps[wps.length - 1][1], wps[wps.length - 1][0]], [wps[0][1], wps[0][0]]],
+               { color: routeStyle.color, weight: 3, dashArray: '6 6' })]).addTo(map);
+  const km2 = turf.area(poly) / 1e6;
+  $('#len').textContent = turf.length(turf.lineString(coords), { units: 'kilometers' }).toFixed(2) + ' km';
+  $('#area').textContent = km2.toFixed(2) + ' km²';
+  const bb = turf.bbox(poly);
+  const ext = Math.max(turf.distance([bb[0], bb[1]], [bb[2], bb[1]]), turf.distance([bb[0], bb[1]], [bb[0], bb[3]]));
+  let msg = '';
+  if (turf.kinks(poly).features.length) msg = 'The outline crosses itself: move a point so the shape has one border. ';
+  msg += ext > 30 ? 'Too large: keep the area within ~30 km (Unreal Engine 4 world limit).'
+    : km2 > 25 ? 'Big area: a few km² builds in minutes, 25 km² and more takes a long time and a lot of memory.'
+    : ext > 16 ? 'Large map: above ~16 km, UE4 precision drops at the edges.' : '';
+  $('#warn').textContent = msg;
+  if (ext > 30) $('#go').disabled = true;
+}
+
+map.on('click', e => { wps.push([e.latlng.lng, e.latlng.lat]); update(); });
+$('#undo').onclick = () => { wps.pop(); update(); };
+$('#clear').onclick = () => { wps = []; update(); };
+$('#reverse').onclick = () => { wps.reverse(); update(); };
+$('#corridor').oninput = draw;
+$('#example').onclick = () => {
+  wps = [[2.1505, 48.6380], [2.0923, 48.6076]];
+  mode = 'snap'; document.querySelectorAll('#mode button').forEach(x => x.classList.toggle('on', x.dataset.m === 'snap'));
+  $('#name').value = 'A10_Briis';
+  map.fitBounds([[48.600, 2.08], [48.648, 2.17]]);
+  update();
+};
+
+// place search (Nominatim, free, 1 request per keystroke pause)
+let qTimer;
+$('#q').oninput = () => {
+  clearTimeout(qTimer);
+  const q = $('#q').value.trim();
+  if (q.length < 3) { $('#results').hidden = true; return; }
+  qTimer = setTimeout(async () => {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&q=' + encodeURIComponent(q));
+    const js = await r.json();
+    $('#results').innerHTML = js.map(x => `<li data-lat="${x.lat}" data-lon="${x.lon}">${x.display_name}</li>`).join('');
+    $('#results').hidden = !js.length;
+    $('#results').querySelectorAll('li').forEach(li => li.onclick = () => {
+      map.setView([+li.dataset.lat, +li.dataset.lon], 14); $('#results').hidden = true;
+    });
+  }, 500);
+};
+
+const OPTS_BOOL = ['rr_exports', 'ground_details', 'buildings', 'vegetation', 'panels', 'barriers', 'markings', 'rail', 'water', 'paths', 'ortho',
+  'lidar_trees', 'bdtopo',
+  'infer_guardrails', 'infer_panels', 'pcd', 'lanelet_other_roads', 'glb', 'roadrunner', 'hq_textures'];
+const OPTS_NUM = ['corridor', 'terrain_res', 'ortho_res', 'tree_spacing', 'max_trees', 'dash', 'gap', 'lane_taper',
+  'pcd_density', 'pcd_terrain_density', 'pcd_voxel'];
+$('#country').onchange = () => {
+  const c = $('#country').value;
+  if (c === 'DE') { $('#dash').value = 6; $('#gap').value = 12; }
+  if (c === 'FR') { $('#dash').value = 3; $('#gap').value = 10; }
+};
+
+// "?" next to an option: a short explanation and an example image (docs/opt_<key>.jpg)
+const HELP = {
+  corridor: ['Corridor', 'Everything within this distance of the route is built: terrain, buildings, trees, signs. 150 m is enough for cameras and LiDAR; wider costs time and memory.'],
+  buildings: ['Buildings', 'Footprints from OpenStreetMap, heights from OSM or IGN BD TOPO, missing ones added from BD TOPO. Style and roof follow the building type. In the RoadRunner project every building is its own prop that you can move, turn or delete.'],
+  vegetation: ['Trees', 'Trees, bushes and hedges. With "Real trees" on, positions and sizes come from the IGN LIDAR HD canopy model.'],
+  lidar_trees: ['Real trees (France)', 'Every tree taller than 3 m, placed from the IGN LIDAR HD canopy height model with its measured height and crown width. Broadleaf or conifer from BD TOPO and the infrared photo.'],
+  panels: ['Panels and poles', 'Traffic signs from OSM with a drawn face, gantries, exit panels, lamps, power poles, cameras.'],
+  barriers: ['Barriers', 'Walls, fences, noise barriers and guard rails mapped in OSM.'],
+  infer_guardrails: ['Inferred guard rails', 'Guard rails along roads of 90 km/h and more, stopping at every junction and exit.'],
+  markings: ['Lane lines', 'Lane lines from the OpenDRIVE road marks (France: 3 m dashes, 10 m gaps).'],
+  rail: ['Railways', 'Tracks with ballast and catenary poles.'],
+  ground_quality: ['Ground quality', 'Low: flat colours per ground type with soft blends, small and fast. Medium: photo textures (ambientCG / Poly Haven, CC0) with soft transitions: one ground type thins out into the next through mottled patches. High: sharper textures, plus 3D grass tufts, flowers and small rocks near the road.'],
+  ground_details: ['Grass, flowers, rocks', 'High quality only: grass tufts on lawns and meadows (with a few flowers), small rocks on dirt and forest floor, densest along the road where cameras and LiDAR look. Capped at 1.5 M triangles.'],
+  ortho: ['Aerial photo', 'The IGN aerial photo draped on the terrain instead of the ground textures. Realistic from above, blurry up close.'],
+  network: ['Road network', 'CARLA\'s converter builds real junctions, exits and roundabouts from OSM. RoadRunner only: roads without junctions, to be drawn in RoadRunner.'],
+  pcd: ['Point cloud map', 'A LiDAR-like point cloud of the whole scene for Autoware localisation.'],
+  roadrunner: ['RoadRunner project', 'A RoadRunner project with the same roads (OpenDRIVE), library trees and signs, and our buildings and ground as props you can edit.'],
+  rr_exports: ['RoadRunner exports', 'RoadRunner also writes its own CARLA FBX, Lanelet2 and OpenDRIVE. About 4 minutes on a 50 km route; untick to only build the project.'],
+};
+document.querySelectorAll('[data-help]').forEach(el => {
+  const q = document.createElement('span');
+  q.className = 'qm'; q.textContent = '?'; q.title = 'What is this?';
+  q.onclick = ev => {
+    ev.preventDefault(); ev.stopPropagation();
+    const [title, text] = HELP[el.dataset.help] || ['', ''];
+    const h = $('#help');
+    h.innerHTML = `<b>${title}</b>${text}<img src="/docs/opt_${el.dataset.help}.jpg" alt="" onerror="this.remove()">`;
+    const r = q.getBoundingClientRect();
+    h.style.left = Math.min(r.right + 8, window.innerWidth - 400) + 'px';
+    h.style.top = Math.max(8, Math.min(r.top - 20, window.innerHeight - 420)) + 'px';
+    h.style.display = 'block';
+  };
+  if (el.classList.contains('num') || el.classList.contains('wide')) {
+    // keep the grid: the "?" goes with the label text
+    const txt = [...el.childNodes].find(n => n.nodeType === 3 && n.textContent.trim());
+    const s = document.createElement('span');
+    s.textContent = txt ? txt.textContent.trim() : '';
+    s.appendChild(q);
+    if (txt) el.replaceChild(s, txt); else el.prepend(s);
+  } else el.appendChild(q);
+});
+document.addEventListener('click', ev => { if (!ev.target.closest('#help')) $('#help').style.display = 'none'; });
+
+function options() {
+  const o = { name: $('#name').value, dem: $('#dem').value, country: $('#country').value,
+              ground_quality: $('#ground_quality').value,
+              osm_source: $('#osm_source').value, network: $('#network').value, roadrunner_project: $('#roadrunner_project').value };
+  OPTS_BOOL.forEach(k => o[k] = $('#' + k).checked);
+  OPTS_NUM.forEach(k => o[k] = +$('#' + k).value);
+  return o;
+}
+
+function fmtSize(n) { return n > 1e6 ? (n / 1e6).toFixed(1) + ' MB' : (n / 1e3).toFixed(0) + ' kB'; }
+
+function fileList(files) {
+  return files.map(f => {
+    const label = f.path + (f.count ? ` (${f.count} files)` : '');
+    const link = f.count ? label : `<a href="/files/${f.path}" download>${label}</a>`;
+    const view = f.path.endsWith('.glb') ? ` · <a href="/viewer.html?glb=/files/${encodeURIComponent(f.path)}" target="_blank">open 3D preview</a>` : '';
+    return `<li>${link} <span class="hint">${fmtSize(f.size)}</span>${view}</li>`;
+  }).join('');
+}
+
+$('#go').onclick = async () => {
+  $('#go').disabled = true; $('#log').textContent = ''; $('#files').innerHTML = ''; snap = null; $('#tasks').innerHTML = '';
+  const r = await fetch('/api/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ coords, options: { ...options(), area: mode === 'area' } }) });
+  const js = await r.json();
+  if (js.error) { $('#stage').textContent = js.error; $('#go').disabled = false; return; }
+  poll(js.job, 0);
+};
+
+function fmtTime(s) {
+  if (s == null || !isFinite(s)) return '';
+  s = Math.max(0, Math.round(s));
+  return s < 60 ? s + ' s' : Math.floor(s / 60) + ' min ' + String(s % 60).padStart(2, '0');
+}
+
+const ICON = { done: '✓', failed: '✗', skipped: '–', pending: '·' };
+let snap = null, snapAt = 0, jobStatus = '';
+
+function renderTasks() {
+  if (!snap) return;
+  const since = (Date.now() - snapAt) / 1000;  // tick running timers between updates
+  const running = jobStatus === 'running';
+  // children (parallel downloads) right under their parent row
+  const ordered = [];
+  snap.tasks.filter(t => !t.parent).forEach(t => {
+    ordered.push(t);
+    snap.tasks.filter(c => c.parent === t.key).forEach(c => ordered.push(c));
+  });
+  const rows = ordered.map(t => {
+    let el = t.elapsed;
+    if (t.state === 'running' && running) el = (el || 0) + since;
+    const ind = t.state === 'running' && t.frac == null;
+    const w = t.state === 'done' ? 100 : ind ? 35 : 100 * (t.frac || 0);
+    const ic = t.state === 'running' ? '<span class="spin"></span>' : (ICON[t.state] || '');
+    const pc = t.state === 'running' && !ind ? Math.round(100 * (t.frac || 0)) + '%' : '';
+    const bar = t.state === 'running' ? `<div class="tb"><i class="${ind ? 'ind' : ''}" style="width:${w}%"></i></div>` : '';
+    const dt = t.detail && t.state !== 'pending' ? `<div class="dt">${t.detail}</div>` : '';
+    return `<div class="task ${t.state}${t.parent ? ' child' : ''}"><span class="ic">${ic}</span>` +
+      `<span class="nm">${t.label}</span><span class="pc">${pc}</span><span class="tm">${t.state === 'pending' ? '' : fmtTime(el)}</span>${bar}${dt}</div>`;
+  });
+  $('#tasks').innerHTML = rows.join('');
+  const p = snap.overall, total = (snap.elapsed || 0) + (running ? since : 0);
+  $('#bar i').style.width = (100 * p).toFixed(1) + '%';
+  const eta = running && p > 0.08 ? total * (1 - p) / p : null;
+  $('#times').textContent = `${fmtTime(total)} elapsed` + (eta != null ? ` · about ${fmtTime(eta)} left` : '');
+  const cur = snap.tasks.filter(t => t.state === 'running' && !t.parent && t.key !== 'package').map(t => t.label.split(' (')[0]);
+  $('#stage').textContent = running ? `${(100 * p).toFixed(0)}% · ${cur.join(', ') || 'working'}` : jobStatus;
+  if (snap.ram) {
+    const r = snap.ram;
+    const stale = running && since > 20 ? ` · no update for ${fmtTime(since)}, still working` : '';
+    $('#ram').textContent = `PC RAM ${(100 * r.used).toFixed(0)}% of ${r.total_gb} GB · this job ${r.job_gb} GB` +
+      (r.throttled ? ' · above 80%, new parallel work paused' : '') + stale;
+    $('#ram').className = r.throttled ? 'hot' : '';
+  }
+}
+setInterval(renderTasks, 1000);
+
+async function poll(id, since) {
+  let j;
+  try { j = await (await fetch(`/api/job/${id}?since=${since}`)).json(); }
+  catch (e) { setTimeout(() => poll(id, since), 2000); return; }
+  if (j.log.length) { $('#log').textContent += j.log.join('\n') + '\n'; $('#log').scrollTop = 1e9; }
+  jobStatus = j.status;
+  if (j.tasks) { snap = j.tasks; snapAt = Date.now() - 1000 * Math.max(0, j.now - j.tasks_at); }
+  else { $('#bar i').style.width = (j.progress * 100).toFixed(1) + '%'; $('#stage').textContent = `${j.status} · ${j.stage}`; }
+  renderTasks();
+  if (j.status === 'done') {
+    $('#files').innerHTML = fileList(j.files);
+    $('#go').disabled = false; loadPrev(); return;
+  }
+  if (j.status === 'error') { $('#stage').textContent = 'error, see the log'; $('#log').parentElement.open = true; $('#go').disabled = false; return; }
+  setTimeout(() => poll(id, j.log_len), 1000);
+}
+
+async function loadPrev() {
+  const r = await fetch('/api/outputs');
+  const items = await r.json();
+  $('#prev').innerHTML = items.length ? items.map(it => {
+    const glb = it.files.find(f => f.path.endsWith('.glb'));
+    return `<li><b>${it.name}</b> · ${((it.length_m || 0) / 1000).toFixed(1)} km · ${it.created || ''}` +
+      (glb ? ` · <a href="/viewer.html?glb=/files/${encodeURIComponent(glb.path)}" target="_blank">3D</a>` : '') + '</li>';
+  }).join('') : '<li>none yet</li>';
+}
+loadPrev();
+// a job still running (page reloaded or opened in a second tab): show its progress
+fetch('/api/current').then(r => r.json()).then(c => {
+  if (c.job && (c.status === 'running' || c.status === 'queued')) { $('#go').disabled = true; poll(c.job, 0); }
+}).catch(() => {});
+fetch('/api/capabilities').then(r => r.json()).then(c => {
+  $('#rrstate').textContent = c.roadrunner ? '(found: ' + c.roadrunner + ')' : '(RoadRunner not found)';
+  if (!c.roadrunner) { $('#roadrunner').checked = false; $('#roadrunner').disabled = true; }
+});
+</script>
+</body>
+</html>

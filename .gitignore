@@ -1,0 +1,5 @@
+# generated maps and downloaded data (several GB)
+output/
+cache/
+__pycache__/
+*.pyc

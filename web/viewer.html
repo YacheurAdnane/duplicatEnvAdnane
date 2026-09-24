@@ -1,0 +1,88 @@
+<!doctype html>
+<!-- Copyright (c) 2026 Adnane Yacheur. All rights reserved. Contact: adnaneyacheur@gmail.com -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>duplicat_env – 3D preview</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fb7cc; font: 13px system-ui, sans-serif; }
+  #hud { position: absolute; top: 10px; left: 10px; background: rgba(15, 19, 24, .78); color: #e6edf3;
+         padding: 10px 12px; border-radius: 8px; max-width: 340px; line-height: 1.5; }
+  #hud b { font-size: 14px; }
+  #hud label { display: block; }
+  #hud .k { color: #8b949e; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud"><b>3D preview</b><div id="st">loading…</div>
+  <div id="layers"></div>
+  <div class="k">Left drag: pan · Right drag: rotate · Wheel: zoom</div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MapControls } from 'three/addons/controls/MapControls.js';
+
+const url = new URLSearchParams(location.search).get('glb');
+const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x9fb7cc);
+scene.fog = new THREE.Fog(0x9fb7cc, 1500, 6000);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.5, 20000);
+scene.add(new THREE.HemisphereLight(0xdfefff, 0x4a5a3a, 1.6));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(300, 800, 200);
+scene.add(sun);
+const controls = new MapControls(camera, renderer.domElement);
+controls.maxPolarAngle = Math.PI / 2.05;
+controls.screenSpacePanning = false;
+
+const groups = {};
+new GLTFLoader().load(url, gltf => {
+  const root = gltf.scene;
+  scene.add(root);
+  let tris = 0;
+  root.traverse(o => {
+    if (o.isMesh) {
+      tris += o.geometry.index ? o.geometry.index.count / 3 : 0;
+      const cat = o.parent && o.parent.name ? o.parent.name.split('_').slice(0, o.parent.name.startsWith('Road_') ? 2 : 1).join('_')
+        : o.name.split('_')[0];
+      (groups[cat] = groups[cat] || []).push(o);
+    }
+  });
+  const box = new THREE.Box3().setFromObject(root);
+  const c = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  controls.target.copy(c);
+  camera.position.set(c.x + size.x * 0.1, c.y + Math.max(size.x, size.z) * 0.25, c.z + size.z * 0.3);
+  controls.update();
+  document.getElementById('st').textContent = `${(tris / 1e6).toFixed(2)} M triangles`;
+  const layers = document.getElementById('layers');
+  Object.keys(groups).sort().forEach(k => {
+    const l = document.createElement('label');
+    l.innerHTML = `<input type="checkbox" checked> ${k} <span class="k">(${groups[k].length})</span>`;
+    l.querySelector('input').onchange = e => groups[k].forEach(o => o.visible = e.target.checked);
+    layers.appendChild(l);
+  });
+}, ev => {
+  if (ev.total) document.getElementById('st').textContent = `loading ${(ev.loaded / ev.total * 100).toFixed(0)}%`;
+}, err => { document.getElementById('st').textContent = 'failed: ' + err.message; });
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+</script>
+</body>
+</html>
